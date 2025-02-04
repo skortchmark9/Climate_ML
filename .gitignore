@@ -8,3 +8,5 @@ checkpoint/
 __pycache__/
 *.pyc
 *.pyo
+**/.DS_STORE
+**/__pycache__/

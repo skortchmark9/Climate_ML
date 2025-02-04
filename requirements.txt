@@ -1,0 +1,4 @@
+xarray
+scikit-learn
+requests
+netcdf4
