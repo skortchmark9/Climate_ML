@@ -2,3 +2,4 @@ xarray
 scikit-learn
 requests
 netcdf4
+plotly
