@@ -1,5 +1,8 @@
 import os
+from time import strptime
 import requests
+import pandas as pd
+import datetime
 
 import cartopy.crs as ccrs # used for map projection
 import matplotlib.pyplot as plt # matplotlib
@@ -150,8 +153,40 @@ def get_landfall_moments(storm):
   return [lon_weighted, lat_weighted, cv[0, 0], cv[1, 1], cv[0, 1]]
 
 def load_clusters():
-    path = './data/storm_landfall_times.csv'
-    with open(path) as f:
-        data = f.read()
+    data = pd.read_csv('data/storm_landfall_times.csv')
+    return data.groupby('spatmoment_label')
 
-    return data
+
+def storm_time_to_datetime(storm_time):
+    initial_day = '1858-11-17 00:00:00'
+    initial_day = datetime.datetime.strptime(initial_day, '%Y-%m-%d %H:%M:%S')
+    new_datetime = initial_day + datetime.timedelta(days=storm_time)
+    return datetime.datetime(
+        year=new_datetime.year,
+        month=new_datetime.month,
+        day=new_datetime.day,
+        hour=new_datetime.hour,
+    )
+
+def datetime_to_storm_time(datetime_):
+    initial_day = datetime.datetime.strptime('1858-11-17 00:00:00', '%Y-%m-%d %H:%M:%S')
+
+    delta = (datetime_ - initial_day)
+    return delta.days + delta.seconds / 3600 / 24
+
+def date_str_to_storm_time(date_str):
+    initial_day = datetime.datetime.strptime('1858-11-17 00:00:00', '%Y-%m-%d %H:%M:%S')
+    date = datetime.datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+    delta = (date - initial_day)
+    return delta.days + delta.seconds / 3600 / 24
+
+def get_intensity(storm):
+    #wmo_wind is the max sustained wind speed 
+    wind_speed = storm.wmo_wind.values
+    #filter for over land
+    #landfall = storm.landfall.values
+    #wind_speed = wind_speed[~landfall]
+    wind_speed = wind_speed[~np.isnan(wind_speed)]
+    #wind_spped = np.average(wind_speed)
+    #wind_speed = np.max(wind_speed)
+    return np.max(wind_speed)

@@ -27,7 +27,13 @@ relevant_states = [
     'Rhode Island',
     'Massachusetts',
     'New Hampshire',
-    'Maine'
+    'Maine',
+    'Tennessee',
+    'Arkansas',
+    'Oklahoma',
+    'Missouri',
+    'Kentucky',
+    'West Virginia'
 ]
 
 def download_source_data():
@@ -62,11 +68,15 @@ def shrink_csv(path):
 
     df['fips_code'] = ['0' + str(code) if len(str(code)) < 5 else str(code) for code in df['fips_code']]
     df['run_start_time'] = pd.to_datetime(df['run_start_time'], format = '%Y-%m-%d %H:%M:%S')
-    df['day'] = df['run_start_time'].dt.date
+    df['date'] = df['run_start_time'].dt.date
     df['hour'] = df['run_start_time'].dt.hour
-    df = df.groupby(by = ['fips_code', 'county', 'state', 'day']).max()
+    # Align the hourly data to 3 hour chunks, taking the maximum within a chunk
+    df['hour_chunk'] = df['hour'] // 3 * 3
+    df = df.groupby(by = ['fips_code', 'county', 'state', 'date', 'hour_chunk']).max()
     df = df.drop(columns = 'run_start_time')
     df = df.reset_index()
+    df['hour'] = df['hour_chunk']
+    df = df.drop(columns = 'hour_chunk')
     return df
 
 def shrink_csvs():
