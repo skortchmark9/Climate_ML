@@ -189,4 +189,8 @@ def get_intensity(storm):
     wind_speed = wind_speed[~np.isnan(wind_speed)]
     #wind_spped = np.average(wind_speed)
     #wind_speed = np.max(wind_speed)
+
+    if (len(wind_speed) == 0):
+        return -1
+
     return np.max(wind_speed)
