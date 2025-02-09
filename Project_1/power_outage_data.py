@@ -15,7 +15,7 @@ relevant_states = [
     'Louisiana',
     'Mississippi',
     'Alabama',
-    'Georga',
+    'Georgia',
     'South Carolina',
     'North Carolina',
     'Virginia',
