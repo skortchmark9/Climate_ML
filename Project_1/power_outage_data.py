@@ -105,6 +105,17 @@ def load_yearly_data():
     
     return dfs_by_year
 
+def load_customers_by_fips():
+    path = DATA_DIR + 'MCC.csv'
+    csv =  pd.read_csv(path)
+    dict = {}
+    for index, row in csv.iterrows():
+        code = row['County_FIPS']
+        fips = code.zfill(5)
+        dict[fips] = row['Customers']
+
+    return dict
+
 def load_fips_shapes():
     filepath = DATA_DIR + 'geojson-counties-fips.json'
     if os.path.exists(filepath):
@@ -139,9 +150,11 @@ def lat_lon_to_fips(lat, lon, fips_shapes):
         if feature['geometry']['type'] == 'MultiPolygon':
             for polygon in feature['geometry']['coordinates']:
                 if any([point_in_polygon(lat, lon, poly) for poly in polygon]):
+                    feature['id'] = feature['id'].zfill(5)
                     return feature
         else:
             if any([point_in_polygon(lat, lon, poly) for poly in feature['geometry']['coordinates']]):
+                feature['id'] = feature['id'].zfill(5)
                 return feature
 
     return None
