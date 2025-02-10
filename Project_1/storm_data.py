@@ -2,6 +2,7 @@ import os
 import requests
 import pandas as pd
 import datetime
+from datetime import datetime, timedelta
 import xarray as xr # x-array
 import numpy as np # numpy
 
@@ -69,3 +70,34 @@ def get_intensity(storm):
         return -1
 
     return np.max(wind_speed)
+
+def get_intensity_time(storm): # return intensity at every timestep rather than max per storm
+    wind_speed = storm.wmo_wind.values[0]
+    if (len(wind_speed) == 0):
+        return -1
+    return wind_speed
+
+def get_storm_data(storms_xr, storm_name):
+    storms_xr['name'] = storms_xr['name'].astype(str)
+    storm = storms_xr.where(storms_xr['name'] == storm_name.upper(), drop=True)
+    return storm
+
+def get_timestamps(storms_xr, storm_name):
+    initial_day = datetime(1858, 11, 17)
+    storm = get_storm_data(storms_xr, storm_name)
+    storm_times = storm.time.values[0]
+
+    timestamps, dates, hours = [], [], []
+
+    for time in storm_times:
+        if np.isnan(time):
+            timestamps.append(np.nan)
+            dates.append(np.nan)
+            hours.append(np.nan)
+        else:
+            x = initial_day + timedelta(days=time)
+            timestamps.append(pd.Timestamp(x))
+            dates.append(x.date())
+            hours.append(x.hour)
+
+    return timestamps, dates, hours
