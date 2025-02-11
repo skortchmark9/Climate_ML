@@ -35,9 +35,9 @@ def load_clusters():
 
 def storm_time_to_datetime(storm_time):
     initial_day = '1858-11-17 00:00:00'
-    initial_day = datetime.datetime.strptime(initial_day, '%Y-%m-%d %H:%M:%S')
-    new_datetime = initial_day + datetime.timedelta(days=storm_time)
-    return datetime.datetime(
+    initial_day = datetime.strptime(initial_day, '%Y-%m-%d %H:%M:%S')
+    new_datetime = initial_day + timedelta(days=storm_time)
+    return datetime(
         year=new_datetime.year,
         month=new_datetime.month,
         day=new_datetime.day,
@@ -45,14 +45,14 @@ def storm_time_to_datetime(storm_time):
     )
 
 def datetime_to_storm_time(datetime_):
-    initial_day = datetime.datetime.strptime('1858-11-17 00:00:00', '%Y-%m-%d %H:%M:%S')
+    initial_day = datetime.strptime('1858-11-17 00:00:00', '%Y-%m-%d %H:%M:%S')
 
     delta = (datetime_ - initial_day)
     return delta.days + delta.seconds / 3600 / 24
 
 def date_str_to_storm_time(date_str):
-    initial_day = datetime.datetime.strptime('1858-11-17 00:00:00', '%Y-%m-%d %H:%M:%S')
-    date = datetime.datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+    initial_day = datetime.strptime('1858-11-17 00:00:00', '%Y-%m-%d %H:%M:%S')
+    date = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
     delta = (date - initial_day)
     return delta.days + delta.seconds / 3600 / 24
 
