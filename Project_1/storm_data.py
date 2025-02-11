@@ -5,6 +5,10 @@ import datetime
 from datetime import datetime, timedelta
 import xarray as xr # x-array
 import numpy as np # numpy
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 def load_tracks():
     path = 'data/NA_data.nc'
@@ -138,3 +142,148 @@ def storm_df(storms_xr, storm_name):
     pivoted_storm = storm_df.groupby(by= 'date').max().reset_index()
 
     return pivoted_storm
+
+
+def filter_data(data, lower_year, upper_year, longitude_boundary, latitude_boundary):
+    # Filter for storms that actually make landfall
+    landfall_mask = data.groupby('storm').map(lambda x: (x.landfall == 0).any())
+    storms_with_landfall = landfall_mask.storm[landfall_mask]
+    data_landfall = data.sel(storm=storms_with_landfall)
+    
+    # Filter for years that have blackout data
+    def passes_year(storm):
+        return ((storm.season <= upper_year) & (storm.season >= lower_year)).any()
+    
+    year_mask = data_landfall.groupby('storm').map(passes_year)
+    storms_within_year = year_mask.storm[year_mask]
+    data_landfall_year = data_landfall.sel(storm=storms_within_year)
+    
+    # Filter for storms within the geographical boundaries of the continental US
+    def passes_boundary(storm):
+        return ((storm.lon <= longitude_boundary) & (storm.lat >= latitude_boundary)).any()
+    
+    boundary_mask = data_landfall_year.groupby('storm').map(passes_boundary)
+    storms_within_boundary = boundary_mask.storm[boundary_mask]
+    data_landfall_year_US = data_landfall_year.sel(storm=storms_within_boundary)
+    
+    return data_landfall_year_US
+
+def get_landfall_lon_lat(storm):
+    """Returns the longitude and latitude values where the landfall variable is equal to zero."""
+    # Filter the storm data where landfall is equal to zero
+    filtered_storm = storm.where(storm.landfall == 0, drop=True)
+    
+    lon_lst = filtered_storm.lon.values
+    lat_lst = filtered_storm.lat.values
+    
+    lon_lst = lon_lst[~np.isnan(lon_lst)]
+    lat_lst = lat_lst[~np.isnan(lat_lst)]
+    
+    return lon_lst, lat_lst
+
+def get_landfall_moments(storm):
+  lon_lst, lat_lst = get_landfall_lon_lat(storm)
+  # If the track only has one point, there is no point in calculating the moments
+  if len(lon_lst)<= 1: return None
+      
+  # M1 (first moment = mean). 
+  lon_weighted, lat_weighted = np.mean(lon_lst), np.mean(lat_lst)
+    
+  # M2 (second moment = variance of lat and of lon / covariance of lat to lon
+  cv = np.ma.cov([lon_lst, lat_lst])
+    
+  return [lon_weighted, lat_weighted, cv[0, 0], cv[1, 1], cv[0, 1]]
+
+def process_moment_landfall(data, longitude_boundary, latitude_boundary):
+    moment_landfall_array = np.array(data)
+    filtered_moment_landfall = moment_landfall_array[
+        (moment_landfall_array[:, 0] <= longitude_boundary) & 
+        (moment_landfall_array[:, 1] >= latitude_boundary)
+    ]
+    return filtered_moment_landfall[:, :2]
+
+def map_background(label=False, extent=[-100, 0, 0, 60]):
+
+  plt.figure(figsize = (20, 10))
+  ax = plt.axes(projection=ccrs.PlateCarree())
+  ax.coastlines()
+  ax.set_extent(extent)
+  ax.gridlines(draw_labels=label) # show labels or not
+  LAND = cfeature.NaturalEarthFeature('physical', 'land', '10m',
+                                      edgecolor='face',
+                                      facecolor=cfeature.COLORS['land'],
+                                          linewidth=.1)
+  OCEAN = cfeature.NaturalEarthFeature('physical', 'ocean', '10m',
+                                       edgecolor='face',
+                                       facecolor=cfeature.COLORS['water'], linewidth=.1)
+  ax.add_feature(LAND, zorder=0)
+  ax.add_feature(OCEAN)
+  return ax
+
+def plot_landfall_clusters(moments, clusters, colors=None):
+    if colors is None:
+        colors = ['black', 'red', 'blue', 'yellow', 'green', 'magenta', 'orange']
+    
+    labels = clusters[1]
+    ax = map_background()
+
+    for k in range(len(moments)):
+        ax.plot(moments[k][0], moments[k][1], c=colors[labels[k]], marker='*')
+
+    # Create custom legend handles
+    legend_handles = [mpatches.Patch(color=colors[i], label=f'Cluster {i}') for i in range(len(colors))]
+
+    # Add the legend to the plot
+    ax.legend(handles=legend_handles, title='Clusters')
+
+    plt.title('K-means clustering result, 7 clusters')
+    plt.show()
+
+def get_landfall_lon_lat(storm):
+    """Returns the longitude and latitude values where the landfall variable is equal to zero."""
+    #storm['landfall'] = storm['landfall'].astype(int)
+    # Filter the storm data where landfall is equal to zero
+    filtered_storm = storm.where(storm.landfall == 0, drop=True)
+    
+    # Extract longitude and latitude values
+    lon_lst = filtered_storm.lon.values
+    lat_lst = filtered_storm.lat.values
+    
+    # Remove NaN values
+    lon_lst = lon_lst[~np.isnan(lon_lst)]
+    lat_lst = lat_lst[~np.isnan(lat_lst)]
+    
+    return lon_lst, lat_lst
+
+def is_valid_landfall_storm(storm):
+    lon_lst, lat_lst = get_landfall_lon_lat(storm)
+    return len(lon_lst) > 1   # Keep only storms with more than one point
+
+def plot_bar_with_error(data_to_plot, errors, title, colors = None):
+    if colors is None:
+        colors = ['black', 'red', 'blue', 'yellow', 'green', 'magenta', 'orange']
+    plt.figure(figsize=(10, 6))
+    num_bars = len(data_to_plot)
+    bar_colors = [colors[i % len(colors)] for i in range(num_bars)]
+    plt.bar(range(num_bars), data_to_plot, yerr=errors, capsize=5, color=bar_colors, edgecolor='black')
+    plt.xlabel('Cluster')
+    plt.ylabel('Storm Speed')
+    plt.title(title)
+    plt.xticks(range(num_bars), labels=range(num_bars))
+    plt.show()
+
+def combine_data_and_kmeanslabels(data_filtered, moment_landfall, km_landfall, longitude_boundary, latitude_boundary):
+    valid_storms = [i for i in range(data_filtered.dims['storm']) if is_valid_landfall_storm(data_filtered.sel(storm=i))]
+    data_filtered_new = data_filtered.sel(storm=xr.DataArray(valid_storms, dims="storm"))
+    moment_landfall_array = np.array(moment_landfall)
+    moment_lon = moment_landfall_array[:, 0]
+    moment_lat = moment_landfall_array[:, 1]
+    temp_array  = data_filtered_new.assign_coords(moment_lat=('storm', moment_lat))
+    full_array  = temp_array.assign_coords(moment_lon=('storm', moment_lon))
+    conus_mask = (full_array.moment_lon <= longitude_boundary) & (full_array.moment_lat >= latitude_boundary)
+    storms_within_boundary = full_array.storm[conus_mask]
+    full_array_filtered = full_array.sel(storm=storms_within_boundary)
+    full_array_labeled = full_array_filtered.assign_coords(spatmoment_label=('storm', km_landfall[1]))
+    grouped_spat = full_array_labeled.groupby('spatmoment_label')
+    summary_spat = grouped_spat.mean(dim='storm')
+    return summary_spat
