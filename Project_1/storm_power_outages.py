@@ -224,7 +224,7 @@ def get_blackouts_by_fip_for_storm(storm, yearly_power_data, customers_by_fips):
         during_storm = affected_fips_data[
             (affected_fips_data['fips_code'] == fips_code) &
             (affected_fips_data['date'] >= storm['times'][0].date()) &
-            (affected_fips_data['date'] < storm['times'][-1].date() + pd.Timedelta(days=7))
+            (affected_fips_data['date'] < storm['times'][-1].date() + pd.Timedelta(days=1))
         ]
         after_storm = affected_fips_data[
             (affected_fips_data['fips_code'] == fips_code) &
@@ -232,13 +232,13 @@ def get_blackouts_by_fip_for_storm(storm, yearly_power_data, customers_by_fips):
             (affected_fips_data['date'] < storm['times'][-1].date() + pd.Timedelta(days=14))
         ]
 
-        before = before_storm['customers_out'].max()
-        during = during_storm['customers_out'].max()
-        after = after_storm['customers_out'].max()
+        before = before_storm['customers_out'].mean()
+        during = during_storm['customers_out'].mean()
+        after = after_storm['customers_out'].mean()
         # check for nans
         if pd.isna(before) or pd.isna(during) or pd.isna(after):
             continue
-        percent_change = (during - before) / before * 100
+
         percent_change = (during / fips_customers - before / fips_customers) * 100
         data.append({
             'fips_code': fips_code,
@@ -328,15 +328,15 @@ def plot_blackouts_vs_intensity_by_cluster(clusters, blackout_by_storm_sid, stor
         n_storms = len(storms_by_cluster_id[cluster_id])
 
         intensity = intensities[cluster_id]
-        label = f"Cluster {cluster_id} ({n_storms} storms)"
+        label = f"Cluster {cluster_id} ({n_storms}{' storms' if cluster_id == 4 else ''})"
         plt.text(
-            intensity + (1 if intensity < half else -len(label) / 1.9),
-            means[cluster_id] - 1.5,
+            intensity + (1 if intensity < half else -len(label) / 2.2),
+            means[cluster_id] - 1.2,
             label,
-            fontsize=9
+            fontsize=8
         )
 
-    plt.xlabel('Max wind speed (knots)')
+    plt.xlabel('Average max wind speed (knots)')
     plt.ylabel('Mean blackout percent change')
     plt.title('Blackouts don\'t correlate strongly with wind speed')
     plt.show()

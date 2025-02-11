@@ -267,7 +267,7 @@ def plot_bar_with_error(data_to_plot, errors, title, colors = None):
     bar_colors = [colors[i % len(colors)] for i in range(num_bars)]
     plt.bar(range(num_bars), data_to_plot, yerr=errors, capsize=5, color=bar_colors, edgecolor='black')
     plt.xlabel('Cluster')
-    plt.ylabel('Storm Speed')
+    plt.ylabel('Storm Speed (Kts)')
     plt.title(title)
     plt.xticks(range(num_bars), labels=range(num_bars))
     plt.show()
