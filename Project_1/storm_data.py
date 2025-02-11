@@ -71,8 +71,18 @@ def get_intensity(storm):
 
     return np.max(wind_speed)
 
+state_dict = {'Alabama':'AL', 'Arkansas': 'AR', 'Connecticut': 'CT',
+              'Delaware': 'DE', 'Florida': 'FL', 'Kentucky': 'KY',
+              'Louisiana':'LA', 'Maine':'ME', 'Maryland':'MD',
+              'Massachusetts':'MA', 'Mississippi':'MS',
+              'Missouri':'MO', 'New Hampshire':'NH', 'New Jersey': 'NJ',
+              'New York':'NY', 'North Carolina':'NC', 'Oklahoma':'OK',
+              'Rhode Island':'RI', 'South Carolina':'SC', 'Tennessee':'TN',
+              'Texas': 'TX', 'Virginia':'VA', 'West Virginia':'WV',
+              'Georgia':'GA'}
+
 def get_intensity_time(storm): # return intensity at every timestep rather than max per storm
-    wind_speed = storm.wmo_wind.values[0]
+    wind_speed = storm.wmo_wind
     if (len(wind_speed) == 0):
         return -1
     return wind_speed
@@ -80,12 +90,14 @@ def get_intensity_time(storm): # return intensity at every timestep rather than 
 def get_storm_data(storms_xr, storm_name):
     storms_xr['name'] = storms_xr['name'].astype(str)
     storm = storms_xr.where(storms_xr['name'] == storm_name.upper(), drop=True)
+    storm = storm.to_dataframe().reset_index()
+
     return storm
 
 def get_timestamps(storms_xr, storm_name):
     initial_day = datetime(1858, 11, 17)
     storm = get_storm_data(storms_xr, storm_name)
-    storm_times = storm.time.values[0]
+    storm_times = storm.time
 
     timestamps, dates, hours = [], [], []
 
@@ -101,3 +113,28 @@ def get_timestamps(storms_xr, storm_name):
             hours.append(x.hour)
 
     return timestamps, dates, hours
+
+def outages_bystate(df, year):
+    data = df[year].drop(columns='hour')
+    data = data.groupby(by=['date', 'fips_code', 'county', 'state']).max().reset_index()
+    data = data.drop(columns=['fips_code', 'county'])
+    data = data.groupby(by=['state', 'date']).sum().reset_index()
+    data['state_abbr'] = data['state'].map(state_dict)
+    return data
+
+def storm_df(storms_xr, storm_name):
+
+    storm_choice = get_storm_data(storms_xr, storm_name)
+    
+    storm_dict = {'lat': storm_choice.lat, 
+                  'lon':storm_choice.lon,
+                  'date': get_timestamps(storms_xr, storm_name)[1], 
+                  'intensity': get_intensity_time(storm_choice)}
+
+    storm_df = pd.DataFrame(storm_dict)
+    storm_df = storm_df.dropna()
+
+    # max lat lon and intensity each date
+    pivoted_storm = storm_df.groupby(by= 'date').max().reset_index()
+
+    return pivoted_storm
