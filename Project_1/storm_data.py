@@ -9,6 +9,8 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from cftime import num2date
+
 
 def load_tracks():
     path = 'data/NA_data.nc'
@@ -272,6 +274,19 @@ def plot_bar_with_error(data_to_plot, errors, title, colors = None):
     plt.xticks(range(num_bars), labels=range(num_bars))
     plt.show()
 
+
+def get_landfall_times(storm):
+    landfall_times = storm.time.where(storm.landfall == 0, drop=True)
+    if landfall_times.size > 0:
+        first_landfall_time = landfall_times[0].item()
+        final_landfall_time = landfall_times[-1].item()
+        return first_landfall_time, final_landfall_time
+    else:
+        return None, None
+
+def convert_time(numeric_time, units, calendar):
+    return num2date(numeric_time, units, calendar).strftime('%Y-%m-%d %H:%M:%S')
+
 def combine_data_and_kmeanslabels(data_filtered, moment_landfall, km_landfall, longitude_boundary, latitude_boundary):
     valid_storms = [i for i in range(data_filtered.dims['storm']) if is_valid_landfall_storm(data_filtered.sel(storm=i))]
     data_filtered_new = data_filtered.sel(storm=xr.DataArray(valid_storms, dims="storm"))
@@ -286,4 +301,20 @@ def combine_data_and_kmeanslabels(data_filtered, moment_landfall, km_landfall, l
     full_array_labeled = full_array_filtered.assign_coords(spatmoment_label=('storm', km_landfall[1]))
     grouped_spat = full_array_labeled.groupby('spatmoment_label')
     summary_spat = grouped_spat.mean(dim='storm')
+    time_units = full_array_labeled.time.attrs['units']
+    time_calendar = full_array_labeled.time.attrs.get('calendar', 'standard')
+    results = []
+    for storm_id in full_array_labeled.storm.values:
+        storm = full_array_labeled.sel(storm=storm_id)
+        first_landfall_time, final_landfall_time = get_landfall_times(storm)
+        if first_landfall_time is not None:
+            results.append({
+                'storm': storm_id,
+                'storm_name': storm.sid.item().decode('utf-8'),  # Decode the byte string to a regular string
+                'spatmoment_label': storm.spatmoment_label.item(),
+                'first_landfall_time': convert_time(first_landfall_time, time_units, time_calendar),
+                'final_landfall_time': convert_time(final_landfall_time, time_units, time_calendar)
+            })
+    results_df = pd.DataFrame(results)
+    results_df.to_csv('data/storm_landfall_times.csv', index=False)
     return summary_spat
