@@ -5,6 +5,10 @@ import datetime
 from datetime import datetime, timedelta
 import xarray as xr # x-array
 import numpy as np # numpy
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 def load_tracks():
     path = 'data/NA_data.nc'
