@@ -155,7 +155,7 @@ def load(path):
     return ds
 
 
-def calculate_mld(density_profile, depths, threshold):
+def calculate_mld_idx(density_profile, threshold):
     """
     Calculate mixed layer depth for one profile.
     density_profile: 1D array of density values for one time step
@@ -171,16 +171,22 @@ def calculate_mld(density_profile, depths, threshold):
     idx = np.where(delta_rho > threshold)[0]
     if len(idx) == 0:
         return np.nan
-
-    return depths[idx[0]]
+    
+    return idx[0]
 
 
 def get_mld(profiles, depths, threshold):
-    mld_values = np.array([
-        calculate_mld(density, depths, threshold)
+    mld_indices = np.array([
+        calculate_mld_idx(density, threshold)
         for density in profiles  # shape: (n_time, n_depth)
     ])
-    return mld_values
+
+    mld_values = np.array([
+        depths[int(idx)] if not np.isnan(idx) else np.nan
+        for idx in mld_indices
+    ])
+
+    return mld_values, mld_indices
 
 def plot_mld(profile_type_name):
     profile_type = profile_types[profile_type_name]
@@ -190,7 +196,7 @@ def plot_mld(profile_type_name):
     times = ds['time'][:]
 
     profiles = filter_profiles(ds, profile_type)
-    mld_depths = get_mld(profiles, depths, profile_type['threshold'])
+    mld_depths, _ = get_mld(profiles, depths, profile_type['threshold'])
 
     assert len(times) == len(profiles)
     assert len(times) == len(mld_depths)
@@ -205,6 +211,77 @@ def plot_mld(profile_type_name):
     )
 
     return profiles, mld_depths
+
+
+def plot_density_shape_function(profile_index):
+    n_layers = 16
+
+    profile_type = profile_types['density']
+    ds = load(profile_type['path'])
+
+    depths = ds['depth'][:]
+    times = ds['time'][:]
+
+    profiles = filter_profiles(ds, profile_type)
+    mld_depth, mld_indices = get_mld(profiles, depths, profile_type['threshold'])
+
+    profile = profiles[profile_index]
+    mld_idx = int(mld_indices[profile_index])
+
+    print(f'MLD Depth at idx {profile_index}: {mld_depth[profile_index]}m')
+
+    profile = profile[:int(mld_idx)]
+
+    # Print the stdev of the profile
+    print(f'Standard Deviation: {np.std(profile)}')
+    return profile
+
+
+def mean_stdev_by_season(season):
+    profile_type = profile_types['density']
+    ds = load(profile_type['path'])
+
+    depths = ds['depth'][:]
+
+    stddevs = []
+    values = []
+
+    profiles = filter_profiles(ds, profile_type)
+    times = ds['time'][:]
+    times_dt = num2date(times, units=ds['time'].units, calendar='standard')
+
+    if season == 'winter':
+        months = (12, 1, 2)
+    elif season == 'spring':
+        months = (3, 4, 5)
+    elif season == 'summer':
+        months = (6, 7, 8)
+    elif season == 'fall':
+        months = (9, 10, 11)
+    else:
+        months = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+
+
+    mld_depth, mld_indices = get_mld(profiles, depths, profile_type['threshold'])
+    for i in range(len(profiles)):
+        time = times_dt[i]
+        profile = profiles[i]
+
+        if time.month not in months:
+            continue
+
+        if np.any(np.isnan(profile)):
+            continue
+
+        mld_idx = int(mld_indices[i])
+        # profile = profile[:int(mld_idx)]
+        values = values + list(profile)
+        stddevs.append(np.std(profile))
+
+    return np.mean(values), np.mean(stddevs)
+
+
+
 
 if __name__ == '__main__':
     plot_mld('density')
