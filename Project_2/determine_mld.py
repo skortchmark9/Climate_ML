@@ -5,14 +5,22 @@ import matplotlib.dates as mdates
 from netCDF4 import num2date
 
 
-temperature_key = 'T_20'
-temperature_quality_key = 'QT_5020'
-temperature_path = 'temperature_profile_papa.cdf'
-
-density_key = 'STH_71' # kg/m^3
-density_quality_key = 'QST_5071'
-density_path = 'density_profile_papa.cdf'
-time_key = 'time'
+profile_types = {
+    'density': {
+        'key': 'STH_71',  # kg/m^3
+        'quality_key': 'QST_5071',
+        'path': 'density_profile_papa.cdf',
+        'threshold': 0.03,
+        'name': 'Density (kg/m^3)'
+    },
+    'temperature': {
+        'key': 'T_20',
+        'quality_key': 'QT_5020',
+        'path': 'temperature_profile_papa.cdf',
+        'threshold': 0.2,
+        'name': 'Temperature (C)'
+    },
+}
 
 
 acceptable_quality = [1, 2, 3]  # Good quality codes
@@ -82,11 +90,13 @@ def stepwise_interpolate_profile_mld_safe(profile, valid_mask):
 
 
 
-def filter_profiles(ds, key, quality_key):
+def filter_profiles(ds, profile_type):
+    key = profile_type['key']
+    quality_key = profile_type['quality_key']
+
     # Extract data at (time, depth, lat=0, lon=0)
     profiles = ds[key][:, :, 0, 0]       # (time, depth)
     quality_code = ds[quality_key][:, :, 0, 0]                   # (time, depth)
-    time_vector = ds[time_key][:]                                # (time,)
 
     valid_mask = np.isin(quality_code, acceptable_quality)
 
@@ -97,28 +107,27 @@ def filter_profiles(ds, key, quality_key):
 
     # Interpolate per profile
     interpolated_profiles = []
-    valid_times = []
 
     for i in range(profiles.shape[0]):
         profile = profiles[i]
         mask = valid_mask[i]
 
+        cleaned_profile = None
+
         if np.any(mask):  # at least one good value in this profile
-            interp = stepwise_interpolate_profile_mld_safe(profile, mask)
-            interpolated_profiles.append(interp)
-            valid_times.append(time_vector[i])
+            cleaned_profile = stepwise_interpolate_profile_mld_safe(profile, mask)
+        else:
+            cleaned_profile = np.full_like(profile, np.nan)    
+        interpolated_profiles.append(cleaned_profile)
 
-    interpolated_profiles = np.array(interpolated_profiles)
-    valid_times = np.array(valid_times)
-    return interpolated_profiles, valid_times
 
-def plot_profiles(profiles, times, depths, time_units, use_dates=True):
+    return np.array(interpolated_profiles)
+
+def plot_profiles(times, profiles, depths, mld_depths, time_units, use_dates=True):
     # Convert times to datetime
     time_calendar = 'standard'
     times_dt = num2date(times, units=time_units, calendar=time_calendar)
     times_num = mdates.date2num(times_dt)
-
-    mld_depths = get_mld(profiles, depths)
 
     # Create the heatmap
     plt.figure(figsize=(12, 6))
@@ -157,7 +166,7 @@ def calculate_mld(density_profile, depths, threshold):
         return np.nan
 
     surface_density = density_profile[0]  # assuming sorted top to bottom
-    delta_rho = density_profile - surface_density
+    delta_rho = np.abs(density_profile - surface_density)
 
     idx = np.where(delta_rho > threshold)[0]
     if len(idx) == 0:
@@ -166,38 +175,36 @@ def calculate_mld(density_profile, depths, threshold):
     return depths[idx[0]]
 
 
-def get_mld(profiles, depths, threshold=0.03):
+def get_mld(profiles, depths, threshold):
     mld_values = np.array([
         calculate_mld(density, depths, threshold)
         for density in profiles  # shape: (n_time, n_depth)
     ])
     return mld_values
 
+def plot_mld(profile_type_name):
+    profile_type = profile_types[profile_type_name]
+    ds = load(profile_type['path'])
 
-def determine_temp():
-    ds = load(temperature_path)
-    times, profiles = determine(ds, temperature_key, temperature_quality_key)
-    return times, profiles
-
-def determine_density():
-    ds = load(density_path)
-    times, profiles = determine(ds, density_key, density_quality_key)
-    return times, profiles
-
-
-def determine(ds, key, quality_key):
     depths = ds['depth'][:]
-    profiles, times = filter_profiles(ds, key, quality_key)
+    times = ds['time'][:]
+
+    profiles = filter_profiles(ds, profile_type)
+    mld_depths = get_mld(profiles, depths, profile_type['threshold'])
+
+    assert len(times) == len(profiles)
+    assert len(times) == len(mld_depths)
 
     plot_profiles(
-        profiles,
         times,
+        profiles,
         depths,
+        mld_depths,
         ds['time'].units,
         use_dates=True
     )
 
-    return times, profiles
+    return profiles, mld_depths
 
 if __name__ == '__main__':
-    determine()
+    plot_mld('density')
