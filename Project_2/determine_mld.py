@@ -34,7 +34,6 @@ profile_types = {
         'threshold': 0.2,
         'name': 'Temperature (C)'
     },
-
 }
 
 
@@ -103,8 +102,6 @@ def stepwise_interpolate_profile_mld_safe(profile, valid_mask):
 
 
 
-
-
 def filter_profiles(ds, profile_type):
     key = profile_type['key']
     quality_key = profile_type['quality_key']
@@ -148,8 +145,9 @@ def plot_profiles(times, profiles, depths, mld_depths, time_units, use_dates=Tru
     plt.figure(figsize=(12, 6))
 
     times_to_plot = times_num if use_dates else times
-
-    mesh = plt.pcolormesh(times_to_plot, depths, profiles.T, shading='nearest', cmap='plasma')
+    vmin = None
+    vmax = None
+    mesh = plt.pcolormesh(times_to_plot, depths, profiles.T, shading='nearest', cmap='plasma', vmin=vmin, vmax=vmax)
     line = plt.plot(times_num, mld_depths, 'g-', label='MLD', alpha=0.5)
     plt.gca().invert_yaxis()  # depth increases downward
     plt.colorbar(mesh, label='Value')
