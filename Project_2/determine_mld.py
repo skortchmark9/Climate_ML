@@ -39,23 +39,6 @@ profile_types = {
 
 acceptable_quality = [1, 2, 3]  # Good quality codes
 
-def interpolate_bad_values(temp, valid_mask):
-    """
-    Linearly interpolate over bad (False) values in a 1D temperature profile.
-    """
-    if np.all(~valid_mask):  # all values bad — return NaNs
-        return np.full_like(temp, np.nan)
-    
-    # If more than 3/4 of the values are missing, return NaNs
-    if np.sum(~valid_mask) > (len(temp) * 3 / 4):
-        return np.full_like(temp, np.nan)
-
-    x = np.arange(temp.shape[0])
-    good_x = x[valid_mask]
-    good_y = temp[valid_mask]
-
-    return np.interp(x, good_x, good_y)
-
 def stepwise_interpolate_profile_mld_safe(profile, valid_mask):
     """
     Stepwise (nearest-neighbor) interpolation for missing values in a profile.
@@ -225,29 +208,97 @@ def plot_mld(profile_type_name):
 
     return profiles, mld_depths
 
+def plot_mld_comparison(mld_density, mld_temperature):
+    """Make a line plot showing the density-based MLD and the temperature-based MLD as a function of time"""
 
-def plot_density_shape_function(profile_index):
-    n_layers = 16
+    # Choose station (e.g., 'papa') and get both profile types
+    density_type = profile_types['density_papa']
 
-    profile_type = profile_types['density']
-    ds = load(profile_type['path'])
+    # Load datasets
+    ds_density = load(density_type['path'])
 
-    depths = ds['depth'][:]
-    times = ds['time'][:]
+    # Extract times and depths
+    time_slice = min(len(mld_density), len(mld_temperature))
+    mld_density = mld_density[:time_slice]
+    mld_temperature = mld_temperature[:time_slice]
 
-    profiles = filter_profiles(ds, profile_type)
-    mld_depth, mld_indices = get_mld(profiles, depths, profile_type['threshold'])
+    times = ds_density['time'][:time_slice]  # assuming time arrays are the same
+    time_units = ds_density['time'].units
 
-    profile = profiles[profile_index]
-    mld_idx = int(mld_indices[profile_index])
+    # Convert time to datetime
+    time_calendar = 'standard'
+    times_dt = num2date(times, units=time_units, calendar=time_calendar)
+    times_num = mdates.date2num(times_dt)
 
-    print(f'MLD Depth at idx {profile_index}: {mld_depth[profile_index]}m')
+    # Plot
+    plt.figure(figsize=(12, 6))
+    plt.plot(times_num, mld_density, label='Density-based MLD', color='blue', alpha=0.7)
+    plt.plot(times_num, mld_temperature, label='Temperature-based MLD', color='red', alpha=0.7)
+    plt.gca().invert_yaxis()  # because depth increases downward
+    # get axis and format as dates
+    ax = plt.gca()
+    ax.xaxis_date()
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d/%Y'))
 
-    profile = profile[:int(mld_idx)]
+    plt.xlabel('Time')
+    plt.ylabel('Mixed Layer Depth (m)')
+    plt.title('MLD Comparison: Density vs Temperature (Papa Station)')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
-    # Print the stdev of the profile
-    print(f'Standard Deviation: {np.std(profile)}')
-    return profile
+def plot_mld_comparison_by_year(mld_density, mld_temperature):
+    """Plot MLD comparison in subplots by year"""
+
+    # Choose station
+    density_type = profile_types['density_papa']
+    ds_density = load(density_type['path'])
+
+    # Truncate MLD arrays to same length
+    time_slice = min(len(mld_density), len(mld_temperature))
+    mld_density = mld_density[:time_slice]
+    mld_temperature = mld_temperature[:time_slice]
+
+    # Load time info
+    times = ds_density['time'][:time_slice]
+    time_units = ds_density['time'].units
+    times_dt = num2date(times, units=time_units, calendar='standard')
+
+    # Group by year
+    years = np.array([t.year for t in times_dt])
+    unique_years = sorted(set(years))
+
+    incomplete_years = (2007, 2008, 2009, 2024, 2023)
+    unique_years = [year for year in unique_years if year not in incomplete_years]
+
+    n_years = len(unique_years)
+    fig, axes = plt.subplots(n_years, 1, figsize=(12, 3.5 * n_years), sharey=True)
+
+    if n_years == 1:
+        axes = [axes]  # ensure iterable
+
+    for i, year in enumerate(unique_years):
+        ax = axes[i]
+        year_mask = (years == year)
+        year_times = mdates.date2num(np.array(times_dt)[year_mask])
+        ax.plot(year_times, np.array(mld_density)[year_mask], label='Density-based MLD', color='blue', alpha=0.7)
+        ax.plot(year_times, np.array(mld_temperature)[year_mask], label='Temperature-based MLD', color='red', alpha=0.7)
+        ax.invert_yaxis()
+        ax.set_title(f'MLD Comparison ({year})')
+        ax.xaxis_date()
+        ax.xaxis.set_major_locator(mdates.MonthLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b'))  # e.g., Jan, Feb
+        ax.grid(True)
+        if i == n_years - 1:
+            ax.set_xlabel('Date')
+        ax.set_ylabel('MLD (m)')
+        if i == 0:
+            ax.legend()
+
+    plt.tight_layout()
+    plt.show()
+
 
 
 def mean_stdev_by_season(season):
