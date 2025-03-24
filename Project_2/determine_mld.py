@@ -6,20 +6,35 @@ from netCDF4 import num2date
 
 
 profile_types = {
-    'density': {
+    'density_papa': {
         'key': 'STH_71',  # kg/m^3
         'quality_key': 'QST_5071',
-        'path': 'density_profile_papa.cdf',
+        'path': 'Papa station/density_profile_papa.cdf',
         'threshold': 0.03,
         'name': 'Density (kg/m^3)'
     },
-    'temperature': {
+    'temperature_papa': {
         'key': 'T_20',
         'quality_key': 'QT_5020',
-        'path': 'temperature_profile_papa.cdf',
+        'path': 'Papa station/temperature_profile_papa.cdf',
         'threshold': 0.2,
         'name': 'Temperature (C)'
     },
+    'density_keo': {
+        'key': 'STH_71',  # kg/m^3
+        'quality_key': 'QST_5071',
+        'path': 'KEO station/density_profile_KEO.cdf',
+        'threshold': 0.03,
+        'name': 'Density (kg/m^3)'
+    },
+    'temperature_keo': {
+        'key': 'T_20',
+        'quality_key': 'QT_5020',
+        'path': 'KEO station/temperature_profile_KEO.cdf',
+        'threshold': 0.2,
+        'name': 'Temperature (C)'
+    },
+
 }
 
 
