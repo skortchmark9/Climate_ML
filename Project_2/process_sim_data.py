@@ -36,6 +36,7 @@ def load_data():
             diffusivity.append(ds[diffusivity_key][1:, -300:, 0, 0])
 
             mld_depth.append(ds['mld_surf'][1:, 0, 0])
+            print('processed', path)
 
     # Combine all data into a new nc file.
     data = {
@@ -58,7 +59,13 @@ def load_data():
         }
     )
 
-    ds.to_netcdf('data/processed/ows_papa.nc')
-
+    # Set same compression for all variables and coordinates
+    compression = 4
+    encoding = {var: {'zlib': True, 'complevel': compression} for var in ds.data_vars}
+    encoding.update({coord: {'zlib': True, 'complevel': compression} for coord in ds.coords})
+    ds.to_netcdf('data/processed/ows_papa.nc', encoding=encoding)
 
     return ds
+
+if __name__  == '__main__':
+    load_data()

@@ -219,7 +219,7 @@ def plot_mld_comparison(mld_density, mld_temperature):
     # Choose station (e.g., 'papa') and get both profile types
     density_type = profile_types["density_papa"]
 
-    ds_sim = load("./data/processed/ows_papa_2011_2024.nc")
+    ds_sim = load("./data/processed/ows_papa.nc")
     sim_mld = ds_sim["mld_depth"][:]
     sim_time = ds_sim["time"][:]
     sim_time_units = ds_sim["time"].units
