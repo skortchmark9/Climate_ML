@@ -16,24 +16,61 @@ def load_data():
 
 class ProfileDataset(Dataset):
     def __init__(self, xr_dataset):
-        self.X = torch.tensor(xr_dataset['density'].values, dtype=torch.float32)
-        self.y = torch.tensor(xr_dataset['diffusivity'].values, dtype=torch.float32)
+        # Load data
+        density = xr_dataset['density'].values.astype(np.float32)     # shape (T, 300)
+        diffusivity = xr_dataset['diffusivity'].values.astype(np.float32)
+
+        # Normalize density (X) per sample
+        self.X_mean = np.mean(density, axis=1, keepdims=True)
+        self.X_std = np.std(density, axis=1, keepdims=True) + 1e-6
+        X_norm = (density - self.X_mean) / self.X_std
+
+        # Normalize diffusivity (y) per sample
+        self.y_mean = np.mean(diffusivity, axis=1, keepdims=True)
+        self.y_std = np.std(diffusivity, axis=1, keepdims=True) + 1e-6
+        y_norm = (diffusivity - self.y_mean) / self.y_std
+
+        self.X_profiles = torch.tensor(X_norm, dtype=torch.float32)  # shape (T, 300)
+        self.y = torch.tensor(y_norm, dtype=torch.float32)
+
+        # Cyclical time encoding
+        time = xr_dataset['time']
+        dayofyear = time.dt.dayofyear.values.astype(np.float32)
+        hour = time.dt.hour.values.astype(np.float32)
+
+        doy_rad = 2 * np.pi * dayofyear / 365.0
+        hour_rad = 2 * np.pi * hour / 24.0
+
+        doy_sin = np.sin(doy_rad)
+        doy_cos = np.cos(doy_rad)
+        hour_sin = np.sin(hour_rad)
+        hour_cos = np.cos(hour_rad)
+
+        self.temporal = torch.tensor(np.stack([doy_sin, doy_cos, hour_sin, hour_cos], axis=1), dtype=torch.float32)
+
+        # Save raw stats for denormalization
+        self.raw_y_mean = torch.tensor(self.y_mean, dtype=torch.float32)
+        self.raw_y_std = torch.tensor(self.y_std, dtype=torch.float32)
 
     def __len__(self):
-        return self.X.shape[0]  # number of time steps
+        return self.X_profiles.shape[0]
 
     def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]  # both shape (300,)
+        X = torch.cat((self.X_profiles[idx], self.temporal[idx]), dim=0)  # shape (304,)
+        y = self.y[idx]
+        y_mean = self.raw_y_mean[idx]
+        y_std = self.raw_y_std[idx]
+        return X, y, y_mean, y_std  # return y stats for denormalization
 
 class ProfileRegressor(nn.Module):
-    def __init__(self, input_dim=300):
+    def __init__(self, input_dim=304):  # 300 + 4 cyclical time features
         super().__init__()
         self.model = nn.Sequential(
             nn.Linear(input_dim, 512),
             nn.ReLU(),
             nn.Linear(512, 512),
             nn.ReLU(),
-            nn.Linear(512, input_dim)  # output shape (300,)
+            nn.Linear(512, 300)
         )
 
     def forward(self, x):
@@ -48,9 +85,10 @@ def get_dataloaders(xr_dataset, batch_size=128):
     train_set, test_set = random_split(dataset, [train_size, test_size])
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_set, batch_size=1, shuffle=False)  # one profile at a time for plotting
+    test_loader = DataLoader(test_set, batch_size=1, shuffle=False)
 
     return train_loader, test_loader
+
 
 
 def train(ds, epochs=1):
@@ -65,7 +103,7 @@ def train(ds, epochs=1):
     # Training loop
     for epoch in range(epochs):
         total_loss = 0
-        for X_batch, y_batch in train_loader:
+        for X_batch, y_batch, _, _ in train_loader:
             X_batch = X_batch.to(device)
             y_batch = y_batch.to(device)
             pred = model(X_batch)
@@ -79,31 +117,35 @@ def train(ds, epochs=1):
     return model, test_loader
 
 
-def plot_predictions(model, test_loader, depth, num_profiles=5):
+def plot_predictions(model, test_loader, depth, num_profiles=1):
     device = next(model.parameters()).device
     model.eval()
 
     test_points = list(test_loader)
-    test_point_indexes = random.sample(range(len(test_points)), num_profiles)
+    indexes = random.sample(range(len(test_points)), num_profiles)
 
     with torch.no_grad():
-        for i in test_point_indexes:
-            X, y_true = test_points[i]
-
+        for i in indexes:
+            X, y, y_mean, y_std = test_points[i]
             X = X.to(device)
-            y_true = y_true.to(device)
+            y = y.to(device)
+            y_mean = y_mean.to(device)
+            y_std = y_std.to(device)
+
             y_pred = model(X)
 
+            y_pred_denorm = (y_pred * y_std + y_mean).cpu().numpy().flatten()
+            y_true_denorm = (y * y_std + y_mean).cpu().numpy().flatten()
+
             plt.figure(figsize=(6, 4))
-            plt.plot(y_true.cpu().numpy().flatten(), depth, label='Actual', linewidth=2)
-            plt.plot(y_pred.cpu().numpy().flatten(), depth, label='Predicted', linestyle='--')
+            plt.plot(y_true_denorm, depth, label='Actual', linewidth=2)
+            plt.plot(y_pred_denorm, depth, label='Predicted', linestyle='--')
             plt.xlabel("Diffusivity")
             plt.ylabel("Depth")
-            plt.title(f"Profiles {i}")
+            plt.title(f"Profile {i}")
             plt.legend()
             plt.tight_layout()
             plt.show()
-
 
 
 def evaluate_model(model, test_loader):
@@ -114,12 +156,20 @@ def evaluate_model(model, test_loader):
     all_targets = []
 
     with torch.no_grad():
-        for X, y in test_loader:
+        for X, y, y_mean, y_std in test_loader:
             X = X.to(device)
             y = y.to(device)
+            y_mean = y_mean.to(device)
+            y_std = y_std.to(device)
+
             pred = model(X)
-            all_preds.append(pred.cpu().numpy())
-            all_targets.append(y.cpu().numpy())
+
+            # Denormalize predictions and ground truth
+            y_pred_denorm = pred * y_std + y_mean
+            y_true_denorm = y * y_std + y_mean
+
+            all_preds.append(y_pred_denorm.cpu().numpy())
+            all_targets.append(y_true_denorm.cpu().numpy())
 
     y_true = np.concatenate(all_targets, axis=0)
     y_pred = np.concatenate(all_preds, axis=0)
@@ -140,7 +190,7 @@ def main():
     ds = load_data()
     depth = ds['depth'].values
 
-    model, test_loader = train(ds, epochs=10)
+    model, test_loader = train(ds, epochs=4)
     plot_predictions(model, test_loader, depth)
     y_true, y_pred = evaluate_model(model, test_loader)
     return model, test_loader, depth
