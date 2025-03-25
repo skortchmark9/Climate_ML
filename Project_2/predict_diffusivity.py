@@ -7,11 +7,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import random
+from determine_mld import (
+    profile_types,
+    load,
+    filter_profiles,
+    get_mld_from_threshold,
+)
 
 
 
 def load_data():
-    ds = xr.open_dataset('data/processed/ows_papa_2011_2024.nc')
+    ds = xr.open_dataset('data/processed/ows_papa.nc')
     return ds
 
 class ProfileDataset(Dataset):
@@ -123,10 +129,20 @@ def train(ds, epochs=1):
             total_loss += loss.item()
         print(f"Epoch {epoch+1}, Loss: {total_loss:.4f}")
 
+    # === Save global target stats from training data ===
+    # You only need the actual dataset once here
+    dataset = train_loader.dataset.dataset  # unwrap the Subset -> original ProfileDataset
+    global_y_mean = dataset.raw_y_mean.mean().item()
+    global_y_std = dataset.raw_y_std.mean().item()
+
+    model.global_y_mean = global_y_mean
+    model.global_y_std = global_y_std
+    print(f"Saved training y_mean: {global_y_mean:.2e}, y_std: {global_y_std:.2e}")
+
     return model, test_loader
 
 
-def plot_predictions(model, test_loader, depth, num_profiles=1):
+def plot_predictions(model, test_loader, depth, num_profiles=1, show_actual=True):
     model = model.cpu()  # evaluation is light, so keep it on CPU
     model.eval()
 
@@ -135,6 +151,9 @@ def plot_predictions(model, test_loader, depth, num_profiles=1):
 
     total_profiles = X_batch.shape[0]
     indexes = random.sample(range(total_profiles), num_profiles)
+
+    global_y_mean = torch.tensor(model.global_y_mean)
+    global_y_std = torch.tensor(model.global_y_std)
 
     with torch.no_grad():
         preds = model(X_batch)
@@ -146,13 +165,20 @@ def plot_predictions(model, test_loader, depth, num_profiles=1):
         y_std = y_std_batch[i]
         y_pred = preds[i]
 
+        # Check for NaNs
+        if torch.isnan(y_std).any() or torch.isnan(y_mean).any():
+            y_std = global_y_std
+            y_mean = global_y_mean
+
+
         # Denormalize
         y_pred_denorm = (y_pred * y_std + y_mean).numpy().flatten()
         y_true_denorm = (y * y_std + y_mean).numpy().flatten()
 
         # Plot
         plt.figure(figsize=(6, 4))
-        plt.plot(y_true_denorm, depth, label='Actual', linewidth=2)
+        if show_actual:
+            plt.plot(y_true_denorm, depth, label='Actual', linewidth=2)
         plt.plot(y_pred_denorm, depth, label='Predicted', linestyle='--')
         plt.xlabel("Diffusivity")
         plt.ylabel("Depth")
@@ -195,6 +221,59 @@ def evaluate_model(model, test_loader):
     print(f"  R²:   {r2:.4f}")
 
     return y_true, y_pred
+
+
+def observational_to_dataset(profile_type_name):
+    profile_type = profile_types[profile_type_name]
+    ds_obs = load(profile_type["path"])
+
+    depths_obs = ds_obs["depth"][:]
+    times = ds_obs["time"][:]
+
+    profiles = filter_profiles(ds_obs, profile_type)
+
+    depth_grid = np.linspace(0, 300, 300)
+
+
+    # Interpolate to model depth grid
+    profiles_interp = np.array([
+        np.interp(depth_grid, depths_obs, profile)
+        for profile in profiles
+    ])  # shape (N, 300)
+
+    # Compute MLDs from original observed depths
+    mld_depths, _ = get_mld_from_threshold(profiles, depths_obs, profile_type["threshold"])
+
+    # Create dummy diffusivity array (same shape as density)
+    dummy_diffusivity = np.full_like(profiles_interp, fill_value=np.nan)  # won't be used
+
+    # Build xarray.Dataset
+    return xr.Dataset(
+        data_vars={
+            "density": (("time", "depth"), profiles_interp),
+            "diffusivity": (("time", "depth"), dummy_diffusivity),
+            "mld_depth": (("time",), mld_depths),
+        },
+        coords={
+            "depth": depth_grid,
+            "time": ("time", np.array(times, dtype="datetime64[ns]")),
+        },
+    )
+
+
+def predict_from_observations(model):
+    xr_dataset = observational_to_dataset('density_papa')
+    obs_dataset = ProfileDataset(xr_dataset)
+    obs_loader = DataLoader(obs_dataset, batch_size=len(obs_dataset))
+
+    depth_grid_model = np.arange(0, 300, 1)
+
+    ds = load_data()
+    depth = ds['depth'].values
+
+    # Plot
+    plot_predictions(model, obs_loader, depth=depth, num_profiles=5, show_actual=False)
+
 
 
 
