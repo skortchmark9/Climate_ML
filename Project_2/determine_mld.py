@@ -210,9 +210,17 @@ def plot_mld(profile_type_name):
 
 def plot_mld_comparison(mld_density, mld_temperature):
     """Make a line plot showing the density-based MLD and the temperature-based MLD as a function of time"""
+    time_calendar = 'standard'
 
     # Choose station (e.g., 'papa') and get both profile types
     density_type = profile_types['density_papa']
+
+    ds_sim = load('./data/processed/ows_papa_2011_2024.nc')
+    sim_mld = ds_sim['mld_depth'][:]
+    sim_time = ds_sim['time'][:]
+    sim_time_units = ds_sim['time'].units
+    sim_times_dt = num2date(sim_time, units=sim_time_units, calendar=time_calendar)
+    sim_times_num = mdates.date2num(sim_times_dt)
 
     # Load datasets
     ds_density = load(density_type['path'])
@@ -226,14 +234,15 @@ def plot_mld_comparison(mld_density, mld_temperature):
     time_units = ds_density['time'].units
 
     # Convert time to datetime
-    time_calendar = 'standard'
     times_dt = num2date(times, units=time_units, calendar=time_calendar)
     times_num = mdates.date2num(times_dt)
 
     # Plot
     plt.figure(figsize=(12, 6))
+    plt.plot(sim_times_num, sim_mld, label='GOTM-reported MLD', color='green', alpha=0.2)
     plt.plot(times_num, mld_density, label='Density-based MLD', color='blue', alpha=0.7)
     plt.plot(times_num, mld_temperature, label='Temperature-based MLD', color='red', alpha=0.7)
+
     plt.gca().invert_yaxis()  # because depth increases downward
     # get axis and format as dates
     ax = plt.gca()
@@ -242,7 +251,7 @@ def plot_mld_comparison(mld_density, mld_temperature):
 
     plt.xlabel('Time')
     plt.ylabel('Mixed Layer Depth (m)')
-    plt.title('MLD Comparison: Density vs Temperature (Papa Station)')
+    plt.title('MLD Comparison (Papa Station)')
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
