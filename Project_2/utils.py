@@ -811,3 +811,191 @@ def performance_sigma_point(model, x, valid_x, y, valid_y, k_mean, k_std, traini
         k12 -= 1
 
     plt.tight_layout()
+
+
+class learnKappa_layers1(nn.Module):
+    def __init__(self, In_nodes, Hid, Out_nodes):
+        super(learnKappa_layers1, self).__init__()
+        self.linear1 = nn.Linear(In_nodes, Hid)  # Input to hidden layer
+        self.linear2 = nn.Linear(Hid, Out_nodes)  # Hidden to output layer
+        self.dropout = nn.Dropout(0.25)  # Dropout to reduce overfitting
+
+    def forward(self, x):
+        x2 = self.linear1(x)
+        h1 = torch.relu(x2)  # ReLU activation
+        h1 = self.dropout(h1)
+        y_pred = self.linear2(h1)  # Output predictions
+        return y_pred
+
+
+class learnKappa_layers2(nn.Module):
+    def __init__(self, In_nodes, Hid, Out_nodes):
+        super(learnKappa_layers2, self).__init__()
+        self.linear1 = nn.Linear(In_nodes, Hid)
+        self.linear2 = nn.Linear(Hid, Hid)
+        self.linear3 = nn.Linear(Hid, Out_nodes)
+        self.dropout = nn.Dropout(0.25)
+
+    def forward(self, x):
+        x2 = self.linear1(x)
+        h1 = torch.relu(x2)
+        h1 = self.dropout(h1)
+        h2 = self.linear2(h1)
+        h3 = torch.relu(h2)
+        h3 = self.dropout(h3)
+        y_pred = self.linear3(h3)
+        return y_pred
+
+
+class learnKappa_layers3(nn.Module):
+    def __init__(self, In_nodes, Hid, Out_nodes):
+        super(learnKappa_layers3, self).__init__()
+        self.linear1 = nn.Linear(In_nodes, Hid)
+        self.linear2 = nn.Linear(Hid, Hid)
+        self.linear3 = nn.Linear(Hid, Hid)
+        self.linear4 = nn.Linear(Hid, Out_nodes)
+        self.dropout = nn.Dropout(0.25)
+
+    def forward(self, x):
+        x2 = self.linear1(x)
+        h1 = torch.relu(x2)
+        h1 = self.dropout(h1)
+        h2 = self.linear2(h1)
+        h3 = torch.relu(h2)
+        h3 = self.dropout(h3)
+        h4 = self.linear3(h3)
+        h5 = torch.relu(h4)
+        h5 = self.dropout(h5)
+        y_pred = self.linear4(h5)
+        return y_pred
+
+
+class learnKappa_layers4(nn.Module):
+    def __init__(self, In_nodes, Hid, Out_nodes):
+        super(learnKappa_layers4, self).__init__()
+        self.linear1 = nn.Linear(In_nodes, Hid)
+        self.linear2 = nn.Linear(Hid, Hid)
+        self.linear3 = nn.Linear(Hid, Hid)
+        self.linear4 = nn.Linear(Hid, Hid)
+        self.linear5 = nn.Linear(Hid, Out_nodes)
+        self.dropout = nn.Dropout(0.25)
+
+    def forward(self, x):
+        x2 = self.linear1(x)
+        h1 = torch.relu(x2)
+        h1 = self.dropout(h1)
+        h2 = self.linear2(h1)
+        h3 = torch.relu(h2)
+        h3 = self.dropout(h3)
+        h4 = self.linear3(h3)
+        h5 = torch.relu(h4)
+        h5 = self.dropout(h5)
+        h6 = self.linear4(h5)
+        h7 = torch.relu(h6)
+        h7 = self.dropout(h7)
+        y_pred = self.linear5(h7)
+        return y_pred
+
+
+def create_highlighted_df(hyper_parameters_and_losses):
+    """
+    Converts a list of hyperparameter-loss tuples into a pandas DataFrame,
+    highlights the row with the lowest validation loss, and returns the styled DataFrame.
+
+    Parameters:
+        hyper_parameters_and_losses (list): List of tuples containing
+            (hidden layers, hidden units, training loss tensor, validation loss tensor)
+
+    Returns:
+        pd.Styler: Styled DataFrame with the lowest validation loss row highlighted.
+    """
+    # Convert list to DataFrame
+    df = pd.DataFrame(
+        hyper_parameters_and_losses,
+        columns=[
+            "Hidden Layers",
+            "Hidden Units",
+            "Learning Rate",
+            "Training Loss",
+            "Validation Loss",
+        ],
+    )
+
+    # Convert tensor values to floats
+    df["Training Loss"] = df["Training Loss"].apply(lambda x: x.item())
+    df["Validation Loss"] = df["Validation Loss"].apply(lambda x: x.item())
+
+    # Find the index of the row with the lowest validation loss
+    min_val_loss_idx = df["Validation Loss"].idxmin()
+
+    # Function to highlight row
+    def highlight_row(s):
+        return [
+            "background-color: yellow" if s.name == min_val_loss_idx else "" for _ in s
+        ]
+
+    # Apply highlighting
+    return df.style.apply(highlight_row, axis=1)
+
+
+def run_hyperparameter_sweep(
+    k_mean, k_std, x, y, valid_x, valid_y, device, epochs=3000, k_points=21
+):
+    hid_array = np.array([16, 32, 64])
+    lrs = np.array([1e-1, 1e-2, 1e-3])
+    lays = np.array([1, 2, 3])
+    torch.manual_seed(10)
+
+    k_mean_c = torch.tensor(k_mean).float().to(device)
+    k_std_c = torch.tensor(k_std).float().to(device)
+
+    hyper_parameters_and_losses = []
+
+    for la in lays:
+        for h in hid_array:
+            for lr in lrs:
+                in_nod, hid_nod, o_nod = 3, h, 21
+                print("la, h, lr is >", la, h, lr)
+
+                model_classes = {
+                    1: learnKappa_layers1,
+                    2: learnKappa_layers2,
+                    3: learnKappa_layers3,
+                    4: learnKappa_layers4,
+                }
+
+                model = model_classes.get(la, lambda *args: print("Check code"))(
+                    in_nod, hid_nod, o_nod
+                )
+                model = model.to(device)
+
+                model, loss_array = modeltrain_loss(
+                    in_nod,
+                    hid_nod,
+                    o_nod,
+                    lr,
+                    epochs,
+                    x,
+                    y,
+                    valid_x,
+                    valid_y,
+                    model,
+                    device,
+                    k_mean_c,
+                    k_std_c,
+                    patience=1000,
+                )
+
+                training_loss = loss_array[:, 1]  # Training loss
+                validation_loss = loss_array[:, 2]  # Validation loss
+
+                final_train_loss = training_loss[-1]
+                final_valid_loss = validation_loss[-1]
+                hyper_parameters_and_losses.append(
+                    (la, h, lr, final_train_loss, final_valid_loss)
+                )
+
+                del model, loss_array
+                torch.cuda.empty_cache()
+
+    return hyper_parameters_and_losses
