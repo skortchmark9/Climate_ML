@@ -1,3 +1,4 @@
+import datetime
 import xarray as xr
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -5,17 +6,21 @@ import torch.nn as nn
 from torch.utils.data import random_split
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 import random
 from determine_mld import (
     profile_types,
     load,
     filter_profiles,
     get_mld_from_threshold,
+    stepwise_interpolate_profile_mld_safe,
 )
+from netCDF4 import num2date
 from scipy.ndimage import gaussian_filter1d
 
+import random
 
+random.seed(42)
 
 
 def load_data():
@@ -46,6 +51,7 @@ class ProfileDataset(Dataset):
 
         # === Extract auxiliary features ===
         time = xr_dataset['time']
+        self.time = time
         doy = time.dt.dayofyear.values.astype(np.float32)            # (T,)
         hour = time.dt.hour.values.astype(np.float32)                # (T,)
 
@@ -144,7 +150,7 @@ def train(ds, epochs=1):
     return model, test_loader
 
 
-def plot_predictions(model, test_loader, depth, num_profiles=1, show_actual=True):
+def plot_predictions(model, test_loader, depth, num_profiles=1, show_actual=True, index=None):
     model = model.cpu()  # evaluation is light, so keep it on CPU
     model.eval()
 
@@ -153,6 +159,8 @@ def plot_predictions(model, test_loader, depth, num_profiles=1, show_actual=True
 
     total_profiles = X_batch.shape[0]
     indexes = random.sample(range(total_profiles), num_profiles)
+    if index:
+        indexes = [index]
 
     global_y_mean = torch.tensor(model.global_y_mean)
     global_y_std = torch.tensor(model.global_y_std)
@@ -177,20 +185,34 @@ def plot_predictions(model, test_loader, depth, num_profiles=1, show_actual=True
         y_pred_denorm = (y_pred * y_std + y_mean).numpy().flatten()
         y_true_denorm = (y * y_std + y_mean).numpy().flatten()
 
+        if np.isnan(y_pred_denorm).all():
+            continue
+
         # Plot
         plt.figure(figsize=(6, 4))
         if show_actual:
             plt.plot(y_true_denorm, depth, label='Actual', linewidth=2)
             plt.plot(y_pred_denorm, depth, label='Predicted', linestyle='--')
         else:
-            plt.plot(y_pred_denorm, depth, label='Actual', linewidth=1, alpha=0.3)
+            plt.plot(y_pred_denorm, depth, label='Prediction', linewidth=1, alpha=0.3)
             y_pred_smooth = gaussian_filter1d(y_pred_denorm, sigma=3)
-            plt.plot(y_pred_smooth, depth, label='Actual (smoothed)', linewidth=2)
+            plt.plot(y_pred_smooth, depth, label='Prediction (smoothed)', linewidth=2)
 
 
         plt.xlabel("Diffusivity")
         plt.ylabel("Depth")
-        plt.title(f"Profile {i}")
+
+        if hasattr(test_loader, 'dataset') and hasattr(test_loader.dataset, 'indices'):
+            original_index = test_loader.dataset.indices[i]
+            raw_time = test_loader.dataset.dataset.time[original_index].values  # numpy.datetime64
+        else:
+            original_index = i
+            raw_time = test_loader.dataset.time[i].values
+        dt = raw_time.astype('M8[ms]').astype(datetime.datetime)
+        friendly = dt.strftime("%b %d, %Y %I:%M %p")
+
+
+        plt.title(f"Profile {i} at {friendly}")
         plt.legend()
         plt.tight_layout()
         plt.show()
@@ -228,8 +250,6 @@ def evaluate_model(model, test_loader):
     print(f"  MAE:  {mae:.6f}")
     print(f"  R²:   {r2:.4f}")
 
-    return y_true, y_pred
-
 
 def observational_to_dataset(profile_type_name):
     profile_type = profile_types[profile_type_name]
@@ -237,17 +257,22 @@ def observational_to_dataset(profile_type_name):
 
     depths_obs = ds_obs["depth"][:]
     times = ds_obs["time"][:]
+    time_calendar = "standard"
+    times_dt = num2date(times, units=ds_obs['time'].units, calendar=time_calendar)
+
 
     profiles = filter_profiles(ds_obs, profile_type)
 
     depth_grid = np.linspace(0, 300, 300)
 
+    profiles_interp = []
+    for profile in profiles:
+        valid_mask = ~np.isnan(profile)
+        filled_profile = stepwise_interpolate_profile_mld_safe(profile, valid_mask)
+        interp = np.interp(depth_grid, depths_obs, filled_profile)  # now safe to interpolate
+        profiles_interp.append(interp)
 
-    # Interpolate to model depth grid
-    profiles_interp = np.array([
-        np.interp(depth_grid, depths_obs, profile)
-        for profile in profiles
-    ])  # shape (N, 300)
+    profiles_interp = np.array(profiles_interp)
 
     # Compute MLDs from original observed depths
     mld_depths, _ = get_mld_from_threshold(profiles, depths_obs, profile_type["threshold"])
@@ -264,17 +289,14 @@ def observational_to_dataset(profile_type_name):
         },
         coords={
             "depth": depth_grid,
-            "time": ("time", np.array(times, dtype="datetime64[ns]")),
+            "time": ("time", np.array(times_dt, dtype="datetime64[ns]")),
         },
     )
 
 
-def predict_from_observations(model):
-    xr_dataset = observational_to_dataset('density_papa')
+def predict_from_observations(xr_dataset, model):
     obs_dataset = ProfileDataset(xr_dataset)
     obs_loader = DataLoader(obs_dataset, batch_size=len(obs_dataset))
-
-    depth_grid_model = np.arange(0, 300, 1)
 
     ds = load_data()
     depth = ds['depth'].values
