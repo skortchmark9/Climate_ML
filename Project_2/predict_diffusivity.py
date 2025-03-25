@@ -95,10 +95,9 @@ def get_dataloaders(xr_dataset, batch_size=128):
     train_set, test_set = random_split(dataset, [train_size, test_size])
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_set, batch_size=1, shuffle=False)
+    test_loader = DataLoader(test_set, batch_size=len(test_set), shuffle=False)  # load all test data at once
 
     return train_loader, test_loader
-
 
 
 def train(ds, epochs=1):
@@ -128,57 +127,58 @@ def train(ds, epochs=1):
 
 
 def plot_predictions(model, test_loader, depth, num_profiles=1):
-    device = next(model.parameters()).device
+    model = model.cpu()  # evaluation is light, so keep it on CPU
     model.eval()
 
-    test_points = list(test_loader)
-    indexes = random.sample(range(len(test_points)), num_profiles)
+    # Load all test data in one go
+    X_batch, y_batch, y_mean_batch, y_std_batch = next(iter(test_loader))
+
+    total_profiles = X_batch.shape[0]
+    indexes = random.sample(range(total_profiles), num_profiles)
 
     with torch.no_grad():
-        for i in indexes:
-            X, y, y_mean, y_std = test_points[i]
-            X = X.to(device)
-            y = y.to(device)
-            y_mean = y_mean.to(device)
-            y_std = y_std.to(device)
+        preds = model(X_batch)
 
-            y_pred = model(X)
+    for i in indexes:
+        X = X_batch[i]
+        y = y_batch[i]
+        y_mean = y_mean_batch[i]
+        y_std = y_std_batch[i]
+        y_pred = preds[i]
 
-            y_pred_denorm = (y_pred * y_std + y_mean).cpu().numpy().flatten()
-            y_true_denorm = (y * y_std + y_mean).cpu().numpy().flatten()
+        # Denormalize
+        y_pred_denorm = (y_pred * y_std + y_mean).numpy().flatten()
+        y_true_denorm = (y * y_std + y_mean).numpy().flatten()
 
-            plt.figure(figsize=(6, 4))
-            plt.plot(y_true_denorm, depth, label='Actual', linewidth=2)
-            plt.plot(y_pred_denorm, depth, label='Predicted', linestyle='--')
-            plt.xlabel("Diffusivity")
-            plt.ylabel("Depth")
-            plt.title(f"Profile {i}")
-            plt.legend()
-            plt.tight_layout()
-            plt.show()
+        # Plot
+        plt.figure(figsize=(6, 4))
+        plt.plot(y_true_denorm, depth, label='Actual', linewidth=2)
+        plt.plot(y_pred_denorm, depth, label='Predicted', linestyle='--')
+        plt.xlabel("Diffusivity")
+        plt.ylabel("Depth")
+        plt.title(f"Profile {i}")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
 
 
 def evaluate_model(model, test_loader):
-    model = model.cpu()  # keep everything on CPU for simplicity
+    model = model.cpu()
     model.eval()
 
-    all_preds = []
-    all_targets = []
+    # Load everything in one batch
+    X, y, y_mean, y_std = next(iter(test_loader))
 
     with torch.no_grad():
-        for X, y, y_mean, y_std in test_loader:
-            # All tensors are already on CPU (from the dataset + dataloader)
-            pred = model(X)
+        pred = model(X)
 
-            # Denormalize
-            y_pred_denorm = pred * y_std + y_mean
-            y_true_denorm = y * y_std + y_mean
+    # Denormalize in one go
+    y_pred_denorm = pred * y_std + y_mean
+    y_true_denorm = y * y_std + y_mean
 
-            all_preds.append(y_pred_denorm.numpy())
-            all_targets.append(y_true_denorm.numpy())
-
-    y_true = np.concatenate(all_targets, axis=0)
-    y_pred = np.concatenate(all_preds, axis=0)
+    y_true = y_true_denorm.numpy()
+    y_pred = y_pred_denorm.numpy()
 
     mse = mean_squared_error(y_true, y_pred)
     mae = mean_absolute_error(y_true, y_pred)
