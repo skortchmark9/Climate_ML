@@ -941,8 +941,8 @@ def create_highlighted_df(hyper_parameters_and_losses):
 def run_hyperparameter_sweep(
     k_mean, k_std, x, y, valid_x, valid_y, device, epochs=3000, k_points=21
 ):
-    hid_array = np.array([16, 32, 64])
-    lrs = np.array([1e-1, 1e-2, 1e-3])
+    hid_array = np.array([32, 64])
+    lrs = np.array([1e-2, 1e-3])
     lays = np.array([1, 2, 3])
     torch.manual_seed(10)
 
