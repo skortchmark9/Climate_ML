@@ -17,6 +17,7 @@ from determine_mld import (
 )
 from netCDF4 import num2date
 from scipy.ndimage import gaussian_filter1d
+from utils import torch_backend
 
 import random
 
@@ -118,7 +119,7 @@ def train(ds, epochs=1):
     train_loader, test_loader = get_dataloaders(ds)
 
     # Model, Loss, Optimizer
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device(torch_backend())
     model = ProfileRegressor().to(device)
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)

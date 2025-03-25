@@ -27,6 +27,13 @@ from datetime import datetime
 import warnings
 
 
+def torch_backend():
+    if torch.cuda.is_available():
+        return 'cuda'
+    if torch.backends.mps.is_available():
+        return 'mps'
+    return 'cpu'
+
 def load_cdf_files(path):
     """Load all .cdf files in the given directory into an xarray dataset dictionary."""
     cdf_files = [f for f in os.listdir(path) if f.endswith(".cdf")]
