@@ -1,11 +1,11 @@
 # Project 2: Climate Predictions with Machine Learning
 
-## Predicting the Ocean Surface Boundary Layer's Density Profiles using Observational Data 
+## Predicting Ocean Surface Boundary Layer Properties From Observational Data 
 
 ### Group 7: Azam Khan, Samuel Kortchmar, Ahinoam Toubia
 
 ## Overview
-In this project, our group apply the same methodology from the paper *Sane et al. (2023) "Parameterizing vertical mixing coefficients in the ocean surface boundary layer using neural networks."* to estimate density profiles using observational data from Papa Station (Located in the North Pacific Ocean, 50° North latitude, 145° West longitude) and analyze the effects of seasonality on the dataset.
+In this project, we attempt to predict mixed layer properties from observational data, taking inspiration from *Sane et al. (2023) "Parameterizing vertical mixing coefficients in the ocean surface boundary layer using neural networks."*. The source of observational data is Ocean Climate Station Papa.
 
 ### Research Question:
 **Attempt to predict density & diffusivity of the mixed layer from observational data, with examination of the influence of seasonality.**
@@ -19,8 +19,8 @@ In this project, our group apply the same methodology from the paper *Sane et al
 - **Paper vs. observational data**: Examine the relationship between observational data variables and the input variables used in the paper.
 - **Seasonality**: Explain the effects of seasonality on GOTM simulations vs. observational data.
 
-## Contribution Statment:
-Sam and Azam clean Papa Station data (https://www.pmel.noaa.gov/ocs/data/disdel/). Azam create a NN which takes as inputs: (SST, SSS, and time) to predict density. Sam used the observational data from papa station and ploted the density overtime. Sam also managed to create a diffusivity profile based on the observational data. Ahinoam wrote up the explanations for the graph and the text for the data story, focusing on the climate science and seasonality, as well as explaining how the observational data variables relate to the input variables used in the paper. Azam and Sam carried out the computation for model evaluation. All team members contributed to the GitHub repository and prepared the presentation. All team members approve our work presented in our GitHub repository including this contribution statement.
+### Contribution Statment:
+Sam and Azam cleaned the [Papa Station data](https://www.pmel.noaa.gov/ocs/data/disdel/). Azam create a NN which takes as inputs: (SST, SSS, and time) to predict density. Sam used the observational data to run GOTM simulations and created a NN based on that data. Ahinoam wrote up the explanations for the graph and the text for the data story, focusing on the climate science and seasonality, as well as explaining how the observational data variables relate to the input variables used in the paper. Azam and Sam carried out the computation for model evaluation. All team members contributed to the GitHub repository and prepared the presentation. All team members approve our work presented in our GitHub repository including this contribution statement.
 
 
 ## Installation
