@@ -1,7 +1,8 @@
 # GOTM With Surface Forcings from OWS Papa
 
 Source website: https://www.pmel.noaa.gov/ocs/data/disdel/
-Install GOTM like so: https://gotm.net/software/linux/
+
+Install GOTM: https://gotm.net/software/linux/
 
 Once installed, it can be run like so:
 
