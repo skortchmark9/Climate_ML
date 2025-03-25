@@ -182,7 +182,12 @@ def evaluate_model(model, test_loader):
 
     mse = mean_squared_error(y_true, y_pred)
     mae = mean_absolute_error(y_true, y_pred)
-    r2 = r2_score(y_true, y_pred)
+    print("→ y_true mean:", y_true.mean(), "std:", y_true.std())
+    print("→ y_pred mean:", y_pred.mean(), "std:", y_pred.std())
+    print("→ MSE:", mean_squared_error(y_true, y_pred))
+    print("→ Var(y_true):", np.var(y_true))
+    r2 = 1 - mean_squared_error(y_true, y_pred) / np.var(y_true)
+    print("→ R² from formula:", r2)
 
     print(f"Evaluation Metrics:")
     print(f"  MSE:  {mse:.6f}")
@@ -197,7 +202,7 @@ def main():
     ds = load_data()
     depth = ds['depth'].values
 
-    model, test_loader = train(ds, epochs=4)
+    model, test_loader = train(ds, epochs=6)
     plot_predictions(model, test_loader, depth)
     y_true, y_pred = evaluate_model(model, test_loader)
     return model, test_loader, depth
