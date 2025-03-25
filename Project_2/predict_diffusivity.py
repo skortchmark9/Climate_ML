@@ -13,6 +13,8 @@ from determine_mld import (
     filter_profiles,
     get_mld_from_threshold,
 )
+from scipy.ndimage import gaussian_filter1d
+
 
 
 
@@ -179,7 +181,13 @@ def plot_predictions(model, test_loader, depth, num_profiles=1, show_actual=True
         plt.figure(figsize=(6, 4))
         if show_actual:
             plt.plot(y_true_denorm, depth, label='Actual', linewidth=2)
-        plt.plot(y_pred_denorm, depth, label='Predicted', linestyle='--')
+            plt.plot(y_pred_denorm, depth, label='Predicted', linestyle='--')
+        else:
+            plt.plot(y_pred_denorm, depth, label='Actual', linewidth=1, alpha=0.3)
+            y_pred_smooth = gaussian_filter1d(y_pred_denorm, sigma=3)
+            plt.plot(y_pred_smooth, depth, label='Actual (smoothed)', linewidth=2)
+
+
         plt.xlabel("Diffusivity")
         plt.ylabel("Depth")
         plt.title(f"Profile {i}")

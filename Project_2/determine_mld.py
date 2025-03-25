@@ -20,20 +20,6 @@ profile_types = {
         "threshold": 0.2,
         "name": "Temperature (C)",
     },
-    "density_keo": {
-        "key": "STH_71",  # kg/m^3
-        "quality_key": "QST_5071",
-        "path": "KEO station/density_profile_KEO.cdf",
-        "threshold": 0.03,
-        "name": "Density (kg/m^3)",
-    },
-    "temperature_keo": {
-        "key": "T_20",
-        "quality_key": "QT_5020",
-        "path": "KEO station/temperature_profile_KEO.cdf",
-        "threshold": 0.2,
-        "name": "Temperature (C)",
-    },
 }
 
 
@@ -179,7 +165,7 @@ def calculate_mld_idx(density_profile, threshold):
     return idx[0]
 
 
-def get_mld(profiles, depths, threshold):
+def get_mld_from_threshold(profiles, depths, threshold):
     mld_indices = np.array(
         [
             calculate_mld_idx(density, threshold)
@@ -202,7 +188,7 @@ def plot_mld(profile_type_name):
     times = ds["time"][:]
 
     profiles = filter_profiles(ds, profile_type)
-    mld_depths, _ = get_mld(profiles, depths, profile_type["threshold"])
+    mld_depths, _ = get_mld_from_threshold(profiles, depths, profile_type["threshold"])
 
     assert len(times) == len(profiles)
     assert len(times) == len(mld_depths)
@@ -358,7 +344,7 @@ def mean_stdev_by_season(season):
     else:
         months = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 
-    mld_depth, mld_indices = get_mld(profiles, depths, profile_type["threshold"])
+    mld_depth, mld_indices = get_mld_from_threshold(profiles, depths, profile_type["threshold"])
     for i in range(len(profiles)):
         time = times_dt[i]
         profile = profiles[i]
