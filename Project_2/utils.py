@@ -242,6 +242,71 @@ def plot_correlation_heatmap(df, data):
     plt.show()
 
 
+def prepare_data_pipeline(full_df, variables, dp_config=None):
+    """
+    Flexible data preparation pipeline that allows user to specify variables
+
+    Args:
+        full_df: Input DataFrame
+        variables: List of dictionaries specifying variables to include in order
+            Each dict should have:
+            - 'name': column name in DataFrame
+            - 'type': 'static' (single column) or 'dp' (DP array)
+            For DP arrays, can optionally specify:
+            - 'mm1': start index (default 0)
+            - 'mm2': end index (default 21)
+            - 'reverse': whether to reverse DP order (default True)
+        dp_config: Optional global DP configuration (if not specified in individual variables)
+            - 'mm1': default start index (default 0)
+            - 'mm2': default end index (default 21)
+            - 'reverse': default reverse flag (default True)
+
+    Returns:
+        numpy array of combined data
+    """
+    if dp_config is None:
+        dp_config = {"mm1": 0, "mm2": 21, "reverse": True}
+
+    # Process each variable and collect data chunks
+    data_chunks = []
+    total_columns = 0
+
+    for var in variables:
+        if var["type"] == "static":
+            # Single column variable
+            data = full_df[var["name"]].values.reshape(-1, 1)
+            data_chunks.append(data)
+            total_columns += 1
+        elif var["type"] == "dp":
+            # DP array variable
+            mm1 = var.get("mm1", dp_config["mm1"])
+            mm2 = var.get("mm2", dp_config["mm2"])
+            reverse = var.get("reverse", dp_config["reverse"])
+
+            dp_arrays = []
+            for _, row in full_df.iterrows():
+                dp_range = (
+                    range(int(var["name"].split("_")[-1]), 0, -1)
+                    if reverse
+                    else range(1, int(var["name"].split("_")[-1]) + 1)
+                )
+                result = row[
+                    [f"{var['name'].split('_')[0]}_{x}" for x in dp_range]
+                ].values.flatten()[mm1:mm2]
+                dp_arrays.append(result)
+
+            dp_array = np.array(dp_arrays)
+            data_chunks.append(dp_array)
+            total_columns += mm2 - mm1
+
+    # Combine all data chunks
+    if not data_chunks:
+        return np.empty((len(full_df), 0))
+
+    data_load_main = np.hstack(data_chunks)
+    return data_load_main
+
+
 def preprocess_train_valid_data(data_load, num_input_features=3, val_split=0.2):
     """
     Preprocess data with customizable number of input features.
