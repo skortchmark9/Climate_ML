@@ -6,13 +6,13 @@ import os
 import xarray as xr
 
 raw_paths = [
-    'data/raw/ows_papa_2011_2013.nc',
-    'data/raw/ows_papa_2013_2015.nc',
-    'data/raw/ows_papa_2015_2017.nc',
-    'data/raw/ows_papa_2017_2019.nc',
-    'data/raw/ows_papa_2019_2021.nc',
-    'data/raw/ows_papa_2021_2023.nc',
-    'data/raw/ows_papa_2023_2024.nc',
+    'data/raw_sim/ows_papa_2011_2013.nc',
+    'data/raw_sim/ows_papa_2013_2015.nc',
+    'data/raw_sim/ows_papa_2015_2017.nc',
+    'data/raw_sim/ows_papa_2017_2019.nc',
+    'data/raw_sim/ows_papa_2019_2021.nc',
+    'data/raw_sim/ows_papa_2021_2023.nc',
+    'data/raw_sim/ows_papa_2023_2024.nc',
 ]
 
 def load_data():
