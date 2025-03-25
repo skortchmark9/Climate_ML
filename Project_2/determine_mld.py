@@ -9,14 +9,14 @@ profile_types = {
     "density_papa": {
         "key": "STH_71",  # kg/m^3
         "quality_key": "QST_5071",
-        "path": "data/density_profile_papa.cdf",
+        "path": "data/papa_observational_data/density_profile_papa.cdf",
         "threshold": 0.03,
         "name": "Density (kg/m^3)",
     },
     "temperature_papa": {
         "key": "T_20",
         "quality_key": "QT_5020",
-        "path": "data/temperature_profile_papa.cdf",
+        "path": "data/papa_observational_data/temperature_profile_papa.cdf",
         "threshold": 0.2,
         "name": "Temperature (C)",
     },

@@ -183,6 +183,34 @@ def plot_variable_histograms(variables):
     plt.show()
 
 
+def plot_depth_levels_vs_depth(dss):
+    """
+    Plots depth levels against depth in meters from the given dataset.
+
+    Parameters:
+        dss (dict): Dictionary containing the dataset with 'density_profile'.
+
+    Returns:
+        None
+    """
+    # Extract unique depth values
+    depth_values = np.unique(dss["density_profile"].depth)
+
+    # Create depth levels (assuming increasing order)
+    depth_levels = np.arange(1, len(depth_values) + 1)
+
+    # Plot
+    plt.figure(figsize=(6, 5))
+    plt.plot(depth_values, depth_levels, marker="o", linestyle="-")
+    plt.xlabel("Depth in meters")
+    plt.ylabel("Depth Level")
+    plt.yticks(depth_levels)
+    plt.gca().invert_yaxis()  # Invert y-axis so deeper levels appear at the bottom
+    plt.title("Depth Level vs Depth in Meters")
+    plt.grid()
+    plt.show()
+
+
 def plot_dp_distributions(dataframe):
     """
     Plots histograms for the distribution of density profile (DP) values at each depth level.
