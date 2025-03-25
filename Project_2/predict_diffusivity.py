@@ -16,29 +16,33 @@ def load_data():
 
 class ProfileDataset(Dataset):
     def __init__(self, xr_dataset):
-        # Load data
-        density = xr_dataset['density'].values.astype(np.float32)     # shape (T, 300)
-        diffusivity = xr_dataset['diffusivity'].values.astype(np.float32)
+        # === Load raw variables ===
+        density = xr_dataset['density'].values.astype(np.float32)      # (T, 300)
+        diffusivity = xr_dataset['diffusivity'].values.astype(np.float32)  # (T, 300)
 
-        # Normalize density (X) per sample
+        # === Normalize density per profile (feature-wise standardization) ===
         self.X_mean = np.mean(density, axis=1, keepdims=True)
         self.X_std = np.std(density, axis=1, keepdims=True) + 1e-6
         X_norm = (density - self.X_mean) / self.X_std
 
-        # Normalize diffusivity (y) per sample
+        # === Normalize diffusivity per profile ===
         self.y_mean = np.mean(diffusivity, axis=1, keepdims=True)
         self.y_std = np.std(diffusivity, axis=1, keepdims=True) + 1e-6
         y_norm = (diffusivity - self.y_mean) / self.y_std
 
-        self.X_profiles = torch.tensor(X_norm, dtype=torch.float32)  # shape (T, 300)
-        self.y = torch.tensor(y_norm, dtype=torch.float32)
+        # === Create profile and target tensors ===
+        self.X_profiles = torch.tensor(X_norm, dtype=torch.float32)  # (T, 300)
+        self.y = torch.tensor(y_norm, dtype=torch.float32)           # (T, 300)
+        self.raw_y_mean = torch.tensor(self.y_mean, dtype=torch.float32)
+        self.raw_y_std = torch.tensor(self.y_std, dtype=torch.float32)
 
-        # Cyclical time encoding
+        # === Extract auxiliary features ===
         time = xr_dataset['time']
-        dayofyear = time.dt.dayofyear.values.astype(np.float32)
-        hour = time.dt.hour.values.astype(np.float32)
+        doy = time.dt.dayofyear.values.astype(np.float32)            # (T,)
+        hour = time.dt.hour.values.astype(np.float32)                # (T,)
 
-        doy_rad = 2 * np.pi * dayofyear / 365.0
+        # Cyclical encoding for time
+        doy_rad = 2 * np.pi * doy / 365.0
         hour_rad = 2 * np.pi * hour / 24.0
 
         doy_sin = np.sin(doy_rad)
@@ -46,24 +50,30 @@ class ProfileDataset(Dataset):
         hour_sin = np.sin(hour_rad)
         hour_cos = np.cos(hour_rad)
 
-        self.temporal = torch.tensor(np.stack([doy_sin, doy_cos, hour_sin, hour_cos], axis=1), dtype=torch.float32)
+        # === Normalize MLD by max depth ===
+        mld = xr_dataset['mld_depth'].values.astype(np.float32)      # (T,)
+        max_depth = xr_dataset['depth'].values.max()
+        mld_norm = mld / max_depth
 
-        # Save raw stats for denormalization
-        self.raw_y_mean = torch.tensor(self.y_mean, dtype=torch.float32)
-        self.raw_y_std = torch.tensor(self.y_std, dtype=torch.float32)
+        # === Stack auxiliary features into one tensor: (T, 5) ===
+        self.aux_features = torch.tensor(
+            np.stack([doy_sin, doy_cos, hour_sin, hour_cos, mld_norm], axis=1),
+            dtype=torch.float32
+        )
 
     def __len__(self):
         return self.X_profiles.shape[0]
 
     def __getitem__(self, idx):
-        X = torch.cat((self.X_profiles[idx], self.temporal[idx]), dim=0)  # shape (304,)
+        X = torch.cat((self.X_profiles[idx], self.aux_features[idx]), dim=0)  # (305,)
         y = self.y[idx]
         y_mean = self.raw_y_mean[idx]
         y_std = self.raw_y_std[idx]
-        return X, y, y_mean, y_std  # return y stats for denormalization
+        return X, y, y_mean, y_std
+
 
 class ProfileRegressor(nn.Module):
-    def __init__(self, input_dim=304):  # 300 + 4 cyclical time features
+    def __init__(self, input_dim=305):  # 300 profile + 5 aux features
         super().__init__()
         self.model = nn.Sequential(
             nn.Linear(input_dim, 512),
@@ -149,7 +159,7 @@ def plot_predictions(model, test_loader, depth, num_profiles=1):
 
 
 def evaluate_model(model, test_loader):
-    device = next(model.parameters()).device
+    model = model.cpu()  # keep everything on CPU for simplicity
     model.eval()
 
     all_preds = []
@@ -157,19 +167,15 @@ def evaluate_model(model, test_loader):
 
     with torch.no_grad():
         for X, y, y_mean, y_std in test_loader:
-            X = X.to(device)
-            y = y.to(device)
-            y_mean = y_mean.to(device)
-            y_std = y_std.to(device)
-
+            # All tensors are already on CPU (from the dataset + dataloader)
             pred = model(X)
 
-            # Denormalize predictions and ground truth
+            # Denormalize
             y_pred_denorm = pred * y_std + y_mean
             y_true_denorm = y * y_std + y_mean
 
-            all_preds.append(y_pred_denorm.cpu().numpy())
-            all_targets.append(y_true_denorm.cpu().numpy())
+            all_preds.append(y_pred_denorm.numpy())
+            all_targets.append(y_true_denorm.numpy())
 
     y_true = np.concatenate(all_targets, axis=0)
     y_pred = np.concatenate(all_preds, axis=0)
@@ -184,6 +190,7 @@ def evaluate_model(model, test_loader):
     print(f"  R²:   {r2:.4f}")
 
     return y_true, y_pred
+
 
 
 def main():
