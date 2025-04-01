@@ -67,6 +67,7 @@ class ProfileDataset(Dataset):
 
         # === Normalize MLD by max depth ===
         mld = xr_dataset['mld_depth'].values.astype(np.float32)      # (T,)
+        self.mld_depth = mld
         max_depth = xr_dataset['depth'].values.max()
         mld_norm = mld / max_depth
 
@@ -186,7 +187,25 @@ def plot_predictions(model, test_loader, depth, num_profiles=1, show_actual=True
         y_pred_denorm = (y_pred * y_std + y_mean).numpy().flatten()
         y_true_denorm = (y * y_std + y_mean).numpy().flatten()
 
+        mld = None
+        if hasattr(test_loader, 'dataset') and hasattr(test_loader.dataset, 'indices'):
+            original_index = test_loader.dataset.indices[i]
+            raw_time = test_loader.dataset.dataset.time[original_index].values  # numpy.datetime64
+            mld = test_loader.dataset.dataset.mld_depth[original_index].item()
+        else:
+            original_index = i
+            raw_time = test_loader.dataset.time[i].values
+            mld = test_loader.dataset.mld[i].item()
+
+        dt = raw_time.astype('M8[ms]').astype(datetime.datetime)
+        friendly = dt.strftime("%b %d, %Y %I:%M %p")
+        print('MLD:', mld)
+
+        
+
+
         if np.isnan(y_pred_denorm).all():
+            print(f'skipping param from {friendly}')
             continue
 
         # Plot
@@ -203,14 +222,6 @@ def plot_predictions(model, test_loader, depth, num_profiles=1, show_actual=True
         plt.xlabel("Diffusivity")
         plt.ylabel("Depth")
 
-        if hasattr(test_loader, 'dataset') and hasattr(test_loader.dataset, 'indices'):
-            original_index = test_loader.dataset.indices[i]
-            raw_time = test_loader.dataset.dataset.time[original_index].values  # numpy.datetime64
-        else:
-            original_index = i
-            raw_time = test_loader.dataset.time[i].values
-        dt = raw_time.astype('M8[ms]').astype(datetime.datetime)
-        friendly = dt.strftime("%b %d, %Y %I:%M %p")
 
 
         plt.title(f"Profile {i} at {friendly}")
@@ -314,5 +325,5 @@ def main():
 
     model, test_loader = train(ds, epochs=6)
     plot_predictions(model, test_loader, depth)
-    y_true, y_pred = evaluate_model(model, test_loader)
+    evaluate_model(model, test_loader)
     return model, test_loader, depth
