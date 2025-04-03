@@ -245,16 +245,7 @@ def plot_mld_comparison(mld_density, mld_temperature):
     # get axis and format as dates
     ax = plt.gca()
     ax.xaxis_date()
-
-    limit_axis = False
-    if limit_axis:
-        # limit x axis to year 2019-2021
-        date_start = mdates.date2num(np.datetime64("2012-08-24"))
-        date_end = mdates.date2num(np.datetime64("2012-08-25"))
-
-        plt.xlim([date_start, date_end])
-    else:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d/%Y"))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d/%Y"))
 
     plt.xlabel("Time")
     plt.ylabel("Mixed Layer Depth (m)")
